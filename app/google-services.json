@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "60518141841",
+    "project_id": "dirlauncher",
+    "storage_bucket": "dirlauncher.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60518141841:android:2e4cf4f290bed3fac91430",
+        "android_client_info": {
+          "package_name": "org.resurrect.dirlauncher"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxSy8yQ5LZ8P5gLu8_fKir17b4lQdZi5k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
