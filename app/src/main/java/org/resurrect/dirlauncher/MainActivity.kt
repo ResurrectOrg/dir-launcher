@@ -9,26 +9,34 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -191,20 +199,123 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
     val fetchType by viewModel.fetchType.collectAsState()
     val context = LocalContext.current
 
-    if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (fetchType == "API") Text(
-                "Categorizing Apps...",
-                color = Color.White,
-                fontSize = 20.sp
-            ) else Text("Loading Apps...", color = Color.White, fontSize = 20.sp)
+    var searchBarVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var expandedCategories by remember { mutableStateOf(setOf<String>()) }
+    val focusRequester = remember { FocusRequester() }
+
+    val filteredApps = if (searchQuery.isBlank()) categorizedApps else buildMap {
+        categorizedApps.forEach { (category, apps) ->
+            val categoryMatches = category.contains(searchQuery, ignoreCase = true)
+            val matchingApps = apps.filter { it.label.contains(searchQuery, ignoreCase = true) }
+            if (categoryMatches || matchingApps.isNotEmpty()) {
+                put(category, if (categoryMatches) apps else matchingApps)
+            }
         }
-    } else {
-        CategorizedAppList(categorizedApps = categorizedApps) { app ->
-            val launchIntent =
-                context.packageManager.getLaunchIntentForPackage(app.packageName.toString())
-            if (launchIntent != null) {
-                context.startActivity(launchIntent)
+    }
+
+    LaunchedEffect(searchQuery) {
+        expandedCategories = if (searchQuery.isNotBlank()) filteredApps.keys else emptySet()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(searchBarVisible) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {},
+                    onHorizontalDrag = { _, dragAmount ->
+                        if (!searchBarVisible && dragAmount < -30 && !isLoading) {
+                            searchBarVisible = true
+                        } else if (searchBarVisible && dragAmount > 30 && !isLoading) {
+                            searchQuery = ""
+                            searchBarVisible = false
+                        }
+                    }
+                )
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+        ) {
+            AnimatedVisibility(visible = searchBarVisible) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Transparent)
+                        .padding(horizontal = 12.dp)
+                ) {
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (searchQuery.isNotBlank()) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear search",
+                                    modifier = Modifier
+                                        .clickable { searchQuery = "" }
+                                        .padding(8.dp),
+                                    tint = Color.Black.copy(alpha = 0.6f)
+                                )
+                            }
+                        },
+                        placeholder = { Text("Search apps or categories") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .focusRequester(focusRequester),
+                        shape = RoundedCornerShape(50),
+                        colors = TextFieldDefaults.colors(
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedContainerColor = Color.White.copy(alpha = 0.9f),
+                            unfocusedContainerColor = Color.White.copy(alpha = 0.9f),
+                        ),
+                    )
+                }
+                if (this.transition.currentState == this.transition.targetState) {
+                    focusRequester.requestFocus()
+                }
+            }
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (fetchType == "API") Text(
+                        "Categorizing Apps...",
+                        color = Color.White,
+                        fontSize = 20.sp
+                    ) else Text("Loading Apps...", color = Color.White, fontSize = 20.sp)
+                }
+            } else {
+                if (filteredApps.isEmpty() && searchBarVisible) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No apps found", color = Color.White, fontSize = 18.sp)
+                    }
+                } else {
+                    CategorizedAppList(
+                        categorizedApps = filteredApps,
+                        expandedCategories = expandedCategories,
+                        onAppClick = { app ->
+                            val launchIntent =
+                                context.packageManager.getLaunchIntentForPackage(app.packageName.toString())
+                            if (launchIntent != null) {
+                                context.startActivity(launchIntent)
+                            }
+                        },
+                        onCategoryClick = { category ->
+                            expandedCategories = if (expandedCategories.contains(category))
+                                expandedCategories - category else expandedCategories + category
+                        }
+                    )
+                }
             }
         }
     }
@@ -213,7 +324,9 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
 @Composable
 fun CategorizedAppList(
     categorizedApps: Map<String, List<AppInfo>>,
-    onAppClick: (AppInfo) -> Unit
+    expandedCategories: Set<String> = emptySet(),
+    onAppClick: (AppInfo) -> Unit,
+    onCategoryClick: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.systemBarsPadding(),
@@ -222,7 +335,13 @@ fun CategorizedAppList(
     ) {
         items(categorizedApps.entries.toList()) { (category, apps) ->
             if (apps.isNotEmpty()) {
-                FolderItem(category = category, apps = apps, onAppClick = onAppClick)
+                FolderItem(
+                    category = category,
+                    apps = apps,
+                    isExpanded = expandedCategories.contains(category),
+                    onCategoryClick = onCategoryClick,
+                    onAppClick = onAppClick
+                )
             }
         }
     }
@@ -232,10 +351,10 @@ fun CategorizedAppList(
 fun FolderItem(
     category: String,
     apps: List<AppInfo>,
+    isExpanded: Boolean = false,
+    onCategoryClick: (String) -> Unit = {},
     onAppClick: (AppInfo) -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -244,7 +363,7 @@ fun FolderItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { isExpanded = !isExpanded }
+                .clickable { onCategoryClick(category) }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -254,9 +373,7 @@ fun FolderItem(
                 tint = Color.White,
                 modifier = Modifier.size(28.dp)
             )
-
             Spacer(modifier = Modifier.width(12.dp))
-
             Text(
                 text = category,
                 color = Color.White,
