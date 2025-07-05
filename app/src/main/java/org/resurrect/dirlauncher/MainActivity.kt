@@ -391,10 +391,11 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
                             }
                         },
                         onAppLongClick = { app ->
+                            val wasPinned = pinnedApps.contains(app.packageName)
                             viewModel.togglePinApp(app.packageName.toString())
                             Toast.makeText(
                                 context,
-                                if (pinnedApps.contains(app.packageName)) "App pinned" else "App unpinned",
+                                if (!wasPinned) "App pinned" else "App unpinned",
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
